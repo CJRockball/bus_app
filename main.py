@@ -1,6 +1,7 @@
 """
 Stockholm Bus Line 1 Countdown - FastAPI Version
 Real-time bus tracking app with server-side rendering
+Modified to show 2 departures per direction (4 total)
 """
 
 import asyncio
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 # Global variables for caching data
 bus_data_cache = {
     "departures": [],
+    "departures_by_direction": {},
     "last_updated": None,
     "error": None
 }
@@ -53,17 +55,15 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# SL API Configuration
+# SL API Configuration - MODIFIED for 4 departures
 SL_API_CONFIG = {
     "base_url": "https://transport.integration.sl.se/v1",
     "site_id": "1285",  # Stora Essingen
     "bus_line": "1",
-    "max_departures": 2,
+    "max_departures": 6,  # Fetch more to ensure 2 per direction
+    "departures_per_direction": 2,  # NEW: limit per direction
     "refresh_interval": 30  # seconds
 }
-
-
-#https://transport.integration.sl.se/v1/sites/1285/departures?transport=BUS&line=1&forecast=60
 
 # CORS proxies for handling CORS issues
 CORS_PROXIES = [
@@ -113,9 +113,9 @@ class BusDataFetcher:
         return self.get_mock_data()
 
     def process_departure_data(self, data: Dict) -> Dict:
-        """Process API response data"""
+        """Process API response data - MODIFIED to group by direction"""
         try:
-            departures = []
+            all_departures = []
             if data and "departures" in data:
                 for dep in data["departures"]:
                     line = dep.get("line", {})
@@ -132,14 +132,32 @@ class BusDataFetcher:
                             "direction": dep.get("direction", ""),
                             "real_time": dep.get("expected") is not None
                         }
-                        departures.append(departure)
+                        all_departures.append(departure)
 
-                # Sort by expected time and limit results
-                departures.sort(key=lambda x: x["expected_time"] or "")
-                departures = departures[:SL_API_CONFIG["max_departures"]]
+            # Sort by expected time
+            all_departures.sort(key=lambda x: x["expected_time"] or "")
+
+            # Group by direction and limit to 2 per direction
+            departures_by_direction = {}
+            final_departures = []
+
+            for departure in all_departures:
+                direction = departure["direction"]
+                if direction not in departures_by_direction:
+                    departures_by_direction[direction] = []
+
+                # Add to direction group if under limit
+                if len(departures_by_direction[direction]) < SL_API_CONFIG["departures_per_direction"]:
+                    departures_by_direction[direction].append(departure)
+                    final_departures.append(departure)
+
+                # Stop if we have enough total departures
+                if len(final_departures) >= 4:
+                    break
 
             return {
-                "departures": departures,
+                "departures": final_departures,
+                "departures_by_direction": departures_by_direction,
                 "last_updated": datetime.now(tz=ZoneInfo('Europe/Stockholm')).isoformat(),
                 "error": None,
                 "source": "real_api"
@@ -149,27 +167,52 @@ class BusDataFetcher:
             return self.get_mock_data()
 
     def get_mock_data(self) -> Dict:
-        """Generate mock data for demonstration"""
+        """Generate mock data for demonstration - MODIFIED for 4 departures"""
         now = datetime.now(tz=ZoneInfo('Europe/Stockholm'))
+
+        # Create 2 departures per direction
         mock_departures = [
+            # Direction 1 (Frihamnen)
             {
                 "line": "1",
                 "destination": "Frihamnen",
-                "expected_time": (now + timedelta(minutes=4)).isoformat(),
+                "expected_time": (now + timedelta(minutes=3)).isoformat(),
+                "direction": "1",
+                "real_time": True
+            },
+            {
+                "line": "1",
+                "destination": "Frihamnen", 
+                "expected_time": (now + timedelta(minutes=8)).isoformat(),
                 "direction": "1",
                 "real_time": False
             },
+            # Direction 2 (Stora Essingen)
             {
-                "line": "1", 
-                "destination": "Essingetorget",
-                "expected_time": (now + timedelta(minutes=9)).isoformat(),
+                "line": "1",
+                "destination": "Stora Essingen",
+                "expected_time": (now + timedelta(minutes=5)).isoformat(),
                 "direction": "2",
+                "real_time": True
+            },
+            {
+                "line": "1",
+                "destination": "Stora Essingen",
+                "expected_time": (now + timedelta(minutes=12)).isoformat(),
+                "direction": "2", 
                 "real_time": False
             }
         ]
 
+        # Group by direction
+        departures_by_direction = {
+            "1": [dep for dep in mock_departures if dep["direction"] == "1"],
+            "2": [dep for dep in mock_departures if dep["direction"] == "2"]
+        }
+
         return {
             "departures": mock_departures,
+            "departures_by_direction": departures_by_direction,
             "last_updated": now.isoformat(),
             "error": "Using demonstration data - live API unavailable",
             "source": "mock_data"
@@ -225,8 +268,8 @@ async def lifespan(app: FastAPI):
 # Initialize FastAPI app
 app = FastAPI(
     title="Stockholm Bus Line 1 Countdown",
-    description="Real-time countdown for Stockholm bus line 1 from Stora Essingen",
-    version="2.0.0",
+    description="Real-time countdown for Stockholm bus line 1 from Stora Essingen - 2 per direction",
+    version="2.1.0",
     lifespan=lifespan
 )
 
@@ -289,7 +332,9 @@ async def health_check():
     return {
         "status": "healthy",
         "last_updated": bus_data_cache.get("last_updated"),
-        "active_connections": len(manager.active_connections)
+        "active_connections": len(manager.active_connections),
+        "total_departures": len(bus_data_cache.get("departures", [])),
+        "departures_by_direction": {k: len(v) for k, v in bus_data_cache.get("departures_by_direction", {}).items()}
     }
 
 if __name__ == "__main__":

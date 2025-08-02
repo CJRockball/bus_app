@@ -5,323 +5,516 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stockholm Bus Line 1 Countdown - FastAPI</title>
     <link rel="stylesheet" href="/static/style.css">
-    <meta name="theme-color" content="#0084FF">
 </head>
 <body>
     <div class="container">
+        <!-- Header -->
         <header class="header">
             <h1>🚌 Buss Linje 1</h1>
-            <p>Stora Essingen - FastAPI Version</p>
-            <div class="connection-status" id="connectionStatus">
-                <span class="status-dot" id="statusDot"></span>
-                <span id="statusText">Ansluter...</span>
+            <p>Stora Essingen → Båda riktningar</p>
+            <div class="connection-status">
+                <div class="status-dot connected"></div>
+                <span>Ansluten</span>
             </div>
         </header>
-        
+
+        <!-- Main Content -->
         <main class="main-content">
-            <div class="status-bar" id="statusBar">
-                <span id="lastUpdated">
-                    {% if initial_data.last_updated %}
-                        Senast uppdaterad: {{ initial_data.last_updated[:19] | replace('T', ' ') }}
-                    {% else %}
-                        Laddar...
-                    {% endif %}
-                </span>
+            <!-- Status Bar -->
+            <div class="status-bar">
+                {% if initial_data.last_updated %}
+                    Senast uppdaterad: {{ initial_data.last_updated[:19] | replace('T', ' ') }}
+                {% else %}
+                    Laddar...
+                {% endif %}
+
                 {% if initial_data.error %}
-                <div class="error-message">{{ initial_data.error }}</div>
+                    <div class="error-message">{{ initial_data.error }}</div>
                 {% endif %}
             </div>
-            
-            <div class="departures-container" id="departuresContainer">
-                {% for departure in initial_data.departures %}
-                <div class="departure-card" data-expected="{{ departure.expected_time }}">
-                    <div class="departure-header">
-                        <span class="line-badge">{{ departure.line }}</span>
-                        <span class="destination">{{ departure.destination }}</span>
-                        {% if departure.real_time %}
-                        <span class="realtime-indicator">🔴 Live</span>
+
+            <!-- Departures Container -->
+            <div class="departures-container">
+                {% if initial_data.departures_by_direction %}
+                    {% for direction, departures in initial_data.departures_by_direction.items() %}
+                        {% if departures %}
+                            <!-- Direction Header -->
+                            <div class="direction-header">
+                                <h3>
+                                    {% if direction == "1" %}
+                                        🔵 Mot Frihamnen
+                                    {% elif direction == "2" %}
+                                        🟢 Mot Essingetorget  
+                                    {% else %}
+                                        🚌 Riktning {{ direction }}
+                                    {% endif %}
+                                </h3>
+                            </div>
+
+                            <!-- Departures for this direction -->
+                            {% for departure in departures %}
+                                {% set outer_loop = loop %}
+                                <div class="departure-card" data-departure-index="{{ loop.index0 + (outer_loop.index0 * 2) }}">
+                                    <div class="departure-header">
+                                        <span class="line-badge">{{ departure.line }}</span>
+                                        <span class="destination">{{ departure.destination }}</span>
+                                        {% if departure.real_time %}
+                                            <span class="realtime-indicator">🔴 Live</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="countdown-display" id="countdown-{{ loop.index0 + (outer_loop.index0 * 2) }}">--:--</div>
+                                    <div class="departure-time">
+                                        Avgång: {{ departure.expected_time[11:16] if departure.expected_time else '--:--' }}
+                                    </div>
+                                </div>
+                            {% endfor %}
                         {% endif %}
+                    {% endfor %}
+                {% else %}
+                    <!-- Fallback to flat list if direction grouping not available -->
+                    {% for departure in initial_data.departures %}
+                    <div class="departure-card" data-departure-index="{{ loop.index0 }}">
+                        <div class="departure-header">
+                            <span class="line-badge">{{ departure.line }}</span>
+                            <span class="destination">{{ departure.destination }}</span>
+                            {% if departure.real_time %}
+                                <span class="realtime-indicator">🔴 Live</span>
+                            {% endif %}
+                        </div>
+                        <div class="countdown-display" id="countdown-{{ loop.index0 }}">--:--</div>
+                        <div class="departure-time">
+                            Avgång: {{ departure.expected_time[11:16] if departure.expected_time else '--:--' }}
+                        </div>
                     </div>
-                    <div class="countdown-display" data-target="{{ departure.expected_time }}">
-                        --:--
-                    </div>
-                    <div class="departure-time">
-                        Avgång: {{ departure.expected_time[11:16] if departure.expected_time else '--:--' }}
-                    </div>
-                </div>
-                {% endfor %}
-                
+                    {% endfor %}
+                {% endif %}
+
                 {% if not initial_data.departures %}
                 <div class="no-data">
                     <div class="no-data-icon">🚌</div>
-                    <p>Inga avgångar hittades för linje 1</p>
+                    <h3>Inga avgångar hittades för linje 1</h3>
                     <p class="small-text">Kontrollerar igen automatiskt...</p>
                 </div>
                 {% endif %}
             </div>
-            
+
+            <!-- Controls -->
             <div class="controls">
-                <button id="refreshBtn" class="refresh-button">
-                    <span id="refreshIcon">🔄</span>
-                    Uppdatera Nu
+                <button id="refresh-btn" class="refresh-button">
+                    🔄 Uppdatera nu
                 </button>
             </div>
+
+            <!-- Debug Info -->
+            <div style="margin-top: 20px; padding: 10px; background: #f0f0f0; border-radius: 5px; font-size: 12px;">
+                <div id="debug-info">
+                    <div>Svensk tid: <span id="swedish-time">--</span></div>
+                    <div>Antal avgångar: <span id="departure-count">{{ initial_data.departures|length if initial_data.departures else 0 }}</span></div>
+                    <div>Test beräkning: <span id="test-calc">--</span></div>
+                </div>
+            </div>
         </main>
-        
+
+        <!-- Footer -->
         <footer class="footer">
-            <p>Data från SL (Storstockholms Lokaltrafik)</p>
-            <p>Uppdateras automatiskt var {{ config.refresh_interval }} sekund</p>
+            <p>&copy; 2024 Stockholm Bus Countdown - Realtidsdata från SL</p>
             <div class="tech-info">
-                <small>Powered by FastAPI + WebSockets</small>
+                FastAPI • WebSockets • 4 Timers (2 per riktning)
             </div>
         </footer>
     </div>
 
     <script>
-        // Stockholm Bus Line 1 Countdown - Client Side
-        class BusCountdownClient {
+        class BusCountdownApp {
             constructor() {
-                this.websocket = null;
-                this.countdownTimer = null;
+                this.ws = null;
+                this.countdownTimers = new Map();
                 this.reconnectAttempts = 0;
                 this.maxReconnectAttempts = 5;
-                this.reconnectDelay = 3000;
-                
-                this.init();
-            }
+                this.reconnectDelay = 1000;
 
-            init() {
-                this.setupWebSocket();
+                this.initializeWebSocket();
                 this.setupEventListeners();
-                this.startCountdownTimer();
+                this.startDebugClock();
+
+                // Start countdown timers for initial data
+                this.initializeInitialCountdowns();
             }
 
-            setupWebSocket() {
+            // Swedish time calculation (fixed from previous version)
+            getSwedishTime() {
+                const now = new Date();
+
+                const swedishTimeStr = now.toLocaleString('sv-SE', {
+                    timeZone: 'Europe/Stockholm'
+                });
+
+                console.log('Swedish time string from API:', swedishTimeStr);
+
+                const [datePart, timePart] = swedishTimeStr.split(' ');
+                const [year, month, day] = datePart.split('-').map(Number);
+                const [hour, minute, second] = timePart.split(':').map(Number);
+
+                const swedishTime = new Date(year, month - 1, day, hour, minute, second);
+
+                return swedishTime;
+            }
+
+            // Debug method 
+            startDebugClock() {
+                const updateDebugInfo = () => {
+                    const swedishTime = this.getSwedishTime();
+
+                    document.getElementById('swedish-time').textContent = swedishTime.toLocaleString('sv-SE');
+
+                    // Update departure count
+                    const cards = document.querySelectorAll('.departure-card');
+                    document.getElementById('departure-count').textContent = cards.length;
+
+                    // Test calculation with mock departure time
+                    const mockDeparture = new Date(swedishTime.getTime() + 5 * 60000);
+                    const testCountdown = this.calculateCountdown(mockDeparture.toISOString());
+                    document.getElementById('test-calc').textContent = testCountdown ? testCountdown.display : 'Error';
+                };
+
+                updateDebugInfo();
+                setInterval(updateDebugInfo, 1000);
+            }
+
+            initializeInitialCountdowns() {
+                const initialData = {{ initial_data | tojson }};
+                console.log('Initial data:', initialData);
+
+                if (initialData && initialData.departures) {
+                    initialData.departures.forEach((departure, index) => {
+                        if (departure.expected_time) {
+                            console.log(`Starting timer for departure ${index}:`, departure.expected_time);
+                            this.startCountdownTimer(departure.expected_time, index);
+                        }
+                    });
+                }
+            }
+
+            initializeWebSocket() {
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const wsUrl = `${protocol}//${window.location.host}/ws`;
-                
+
                 try {
-                    this.websocket = new WebSocket(wsUrl);
-                    
-                    this.websocket.onopen = () => {
-                        console.log('WebSocket connected');
-                        this.updateConnectionStatus('connected');
-                        this.reconnectAttempts = 0;
-                    };
-                    
-                    this.websocket.onmessage = (event) => {
-                        try {
-                            const data = JSON.parse(event.data);
-                            this.updateDepartures(data);
-                        } catch (error) {
-                            console.error('Error parsing WebSocket message:', error);
-                        }
-                    };
-                    
-                    this.websocket.onclose = () => {
-                        console.log('WebSocket disconnected');
-                        this.updateConnectionStatus('disconnected');
-                        this.attemptReconnect();
-                    };
-                    
-                    this.websocket.onerror = (error) => {
-                        console.error('WebSocket error:', error);
-                        this.updateConnectionStatus('error');
-                    };
-                    
+                    this.ws = new WebSocket(wsUrl);
+                    this.setupWebSocketEventHandlers();
                 } catch (error) {
-                    console.error('Failed to create WebSocket:', error);
+                    console.error('WebSocket connection failed:', error);
                     this.updateConnectionStatus('error');
                 }
             }
 
-            attemptReconnect() {
-                if (this.reconnectAttempts < this.maxReconnectAttempts) {
-                    this.reconnectAttempts++;
-                    this.updateConnectionStatus('reconnecting');
-                    
-                    setTimeout(() => {
-                        console.log(`Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-                        this.setupWebSocket();
-                    }, this.reconnectDelay);
-                } else {
-                    this.updateConnectionStatus('failed');
-                }
+            setupWebSocketEventHandlers() {
+                this.ws.onopen = () => {
+                    console.log('WebSocket connected');
+                    this.updateConnectionStatus('connected');
+                    this.reconnectAttempts = 0;
+                };
+
+                this.ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        console.log('WebSocket data received:', data);
+                        this.updateBusData(data);
+                    } catch (error) {
+                        console.error('Error parsing WebSocket data:', error);
+                    }
+                };
+
+                this.ws.onclose = () => {
+                    console.log('WebSocket disconnected');
+                    this.updateConnectionStatus('disconnected');
+                    this.clearAllCountdownTimers();
+                    this.attemptReconnect();
+                };
+
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    this.updateConnectionStatus('error');
+                };
             }
 
-            updateConnectionStatus(status) {
-                const statusDot = document.getElementById('statusDot');
-                const statusText = document.getElementById('statusText');
-                
-                switch (status) {
-                    case 'connected':
-                        statusDot.className = 'status-dot connected';
-                        statusText.textContent = 'Ansluten';
-                        break;
-                    case 'disconnected':
-                        statusDot.className = 'status-dot disconnected';
-                        statusText.textContent = 'Frånkopplad';
-                        break;
-                    case 'reconnecting':
-                        statusDot.className = 'status-dot reconnecting';
-                        statusText.textContent = 'Återansluter...';
-                        break;
-                    case 'error':
-                        statusDot.className = 'status-dot error';
-                        statusText.textContent = 'Fel';
-                        break;
-                    case 'failed':
-                        statusDot.className = 'status-dot error';
-                        statusText.textContent = 'Anslutning misslyckades';
-                        break;
+            clearAllCountdownTimers() {
+                this.countdownTimers.forEach(timer => clearInterval(timer));
+                this.countdownTimers.clear();
+            }
+
+            updateBusData(data) {
+                this.clearAllCountdownTimers();
+
+                const statusBar = document.querySelector('.status-bar');
+                if (statusBar) {
+                    let statusText = 'Laddar...';
+                    if (data.last_updated) {
+                        const lastUpdated = new Date(data.last_updated).toLocaleString('sv-SE');
+                        statusText = `Senast uppdaterad: ${lastUpdated}`;
+                    }
+
+                    if (data.error) {
+                        statusText += `<div class="error-message">${data.error}</div>`;
+                    }
+
+                    statusBar.innerHTML = statusText;
                 }
+
+                this.updateDepartures(data);
             }
 
             updateDepartures(data) {
-                console.log('Received departure data:', data);
-                
-                // Update last updated time
-                const lastUpdated = document.getElementById('lastUpdated');
-                if (data.last_updated) {
-                    const date = new Date(data.last_updated);
-                    lastUpdated.textContent = `Senast uppdaterad: ${date.toLocaleString('sv-SE')}`;
-                }
-                
-                // Update status bar
-                const statusBar = document.getElementById('statusBar');
-                if (data.error) {
-                    statusBar.innerHTML = `
-                        <span id="lastUpdated">${lastUpdated.textContent}</span>
-                        <div class="error-message">${data.error}</div>
-                    `;
-                } else {
-                    statusBar.innerHTML = `<span id="lastUpdated">${lastUpdated.textContent}</span>`;
-                }
-                
-                // Update departures
-                this.renderDepartures(data.departures || []);
-            }
+                const container = document.querySelector('.departures-container');
+                if (!container) return;
 
-            renderDepartures(departures) {
-                const container = document.getElementById('departuresContainer');
-                
+                const departures = data.departures || [];
+                const departuresByDirection = data.departures_by_direction || {};
+
                 if (departures.length === 0) {
                     container.innerHTML = `
                         <div class="no-data">
                             <div class="no-data-icon">🚌</div>
-                            <p>Inga avgångar hittades för linje 1</p>
+                            <h3>Inga avgångar hittades för linje 1</h3>
                             <p class="small-text">Kontrollerar igen automatiskt...</p>
                         </div>
                     `;
                     return;
                 }
-                
-                container.innerHTML = departures.map(departure => `
-                    <div class="departure-card" data-expected="${departure.expected_time}">
-                        <div class="departure-header">
-                            <span class="line-badge">${departure.line}</span>
-                            <span class="destination">${departure.destination}</span>
-                            ${departure.real_time ? '<span class="realtime-indicator">🔴 Live</span>' : ''}
-                        </div>
-                        <div class="countdown-display" data-target="${departure.expected_time}">
-                            --:--
-                        </div>
-                        <div class="departure-time">
-                            Avgång: ${departure.expected_time ? departure.expected_time.substring(11, 16) : '--:--'}
-                        </div>
-                    </div>
-                `).join('');
-            }
 
-            startCountdownTimer() {
-                this.countdownTimer = setInterval(() => {
-                    this.updateCountdowns();
-                }, 1000);
-            }
+                // Generate HTML grouped by direction
+                let html = '';
+                let globalIndex = 0;
 
-            updateCountdowns() {
-                const countdowns = document.querySelectorAll('.countdown-display[data-target]');
-                const now = new Date();
-                
-                countdowns.forEach(countdown => {
-                    const target = new Date(countdown.dataset.target);
-                    const diffMs = target.getTime() - now.getTime();
-                    
-                    const card = countdown.closest('.departure-card');
-                    
-                    if (diff <= 0) {
-                        countdown.textContent = 'Nu';
-                        countdown.className = 'countdown-display now';
-                        card.classList.add('departing');
-                    } else {
-                        const minutes = Math.floor(diff / 60000);
-                        const seconds = Math.floor((diff % 60000) / 1000);
-                        countdown.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-                        
-                        // Color coding
-                        countdown.className = 'countdown-display';
-                        card.classList.remove('departing', 'urgent', 'warning');
-                        
-                        if (minutes < 2) {
-                            countdown.classList.add('urgent');
-                            card.classList.add('urgent');
-                        } else if (minutes < 5) {
-                            countdown.classList.add('warning');
-                            card.classList.add('warning');
+                // If we have direction grouping, use it
+                if (Object.keys(departuresByDirection).length > 0) {
+                    for (const [direction, directionDepartures] of Object.entries(departuresByDirection)) {
+                        if (directionDepartures && directionDepartures.length > 0) {
+                            // Direction header
+                            let directionName = `Riktning ${direction}`;
+                            if (direction === "1") directionName = "🔵 Mot Frihamnen";
+                            else if (direction === "2") directionName = "🟢 Mot Essingetorget";
+
+                            html += `<div class="direction-header"><h3>${directionName}</h3></div>`;
+
+                            // Departures for this direction
+                            for (const departure of directionDepartures) {
+                                const realtimeIndicator = departure.real_time ? 
+                                    '<span class="realtime-indicator">🔴 Live</span>' : '';
+
+                                const departureTime = departure.expected_time ? 
+                                    departure.expected_time.substring(11, 16) : '--:--';
+
+                                html += `
+                                    <div class="departure-card" data-departure-index="${globalIndex}">
+                                        <div class="departure-header">
+                                            <span class="line-badge">${departure.line}</span>
+                                            <span class="destination">${departure.destination}</span>
+                                            ${realtimeIndicator}
+                                        </div>
+                                        <div class="countdown-display" id="countdown-${globalIndex}">--:--</div>
+                                        <div class="departure-time">
+                                            Avgång: ${departureTime}
+                                        </div>
+                                    </div>
+                                `;
+                                globalIndex++;
+                            }
                         }
                     }
+                } else {
+                    // Fallback to flat list
+                    for (const departure of departures) {
+                        const realtimeIndicator = departure.real_time ? 
+                            '<span class="realtime-indicator">🔴 Live</span>' : '';
+
+                        const departureTime = departure.expected_time ? 
+                            departure.expected_time.substring(11, 16) : '--:--';
+
+                        html += `
+                            <div class="departure-card" data-departure-index="${globalIndex}">
+                                <div class="departure-header">
+                                    <span class="line-badge">${departure.line}</span>
+                                    <span class="destination">${departure.destination}</span>
+                                    ${realtimeIndicator}
+                                </div>
+                                <div class="countdown-display" id="countdown-${globalIndex}">--:--</div>
+                                <div class="departure-time">
+                                    Avgång: ${departureTime}
+                                </div>
+                            </div>
+                        `;
+                        globalIndex++;
+                    }
+                }
+
+                container.innerHTML = html;
+
+                // Start countdown timers for all departures
+                departures.forEach((departure, index) => {
+                    if (departure.expected_time) {
+                        this.startCountdownTimer(departure.expected_time, index);
+                    }
                 });
+            }
+
+            startCountdownTimer(expectedTime, index) {
+                const countdownElement = document.getElementById(`countdown-${index}`);
+                const departureCard = document.querySelector(`[data-departure-index="${index}"]`);
+
+                if (!countdownElement) return;
+
+                if (this.countdownTimers.has(index)) {
+                    clearInterval(this.countdownTimers.get(index));
+                }
+
+                const updateCountdown = () => {
+                    const countdown = this.calculateCountdown(expectedTime);
+
+                    if (countdown) {
+                        countdownElement.textContent = countdown.display;
+                        console.log(`Countdown ${index}: ${countdown.display} (${countdown.totalSeconds}s remaining)`);
+                        this.updateDepartureCardState(departureCard, countdownElement, countdown);
+                    } else {
+                        countdownElement.textContent = 'Avgått';
+                        console.log(`Departure ${index} has departed`);
+                        if (departureCard) {
+                            departureCard.classList.add('departed');
+                        }
+                        if (this.countdownTimers.has(index)) {
+                            clearInterval(this.countdownTimers.get(index));
+                            this.countdownTimers.delete(index);
+                        }
+                    }
+                };
+
+                updateCountdown();
+                const timer = setInterval(updateCountdown, 1000);
+                this.countdownTimers.set(index, timer);
+            }
+
+            calculateCountdown(expectedTime) {
+                const nowSwedish = this.getSwedishTime();
+                const departure = new Date(expectedTime);
+
+                const diff = departure.getTime() - nowSwedish.getTime();
+
+                if (diff <= 0) {
+                    return null;
+                }
+
+                const minutes = Math.floor(diff / 60000);
+                const seconds = Math.max(0, Math.floor((diff % 60000) / 1000));
+
+                const minutesStr = minutes.toString().padStart(2, '0');
+                const secondsStr = seconds.toString().padStart(2, '0');
+
+                return {
+                    display: `${minutesStr}:${secondsStr}`,
+                    minutes: minutes,
+                    seconds: seconds,
+                    totalSeconds: Math.floor(diff / 1000)
+                };
+            }
+
+            updateDepartureCardState(card, countdownElement, countdown) {
+                if (!card || !countdown) return;
+
+                card.classList.remove('urgent', 'warning', 'departing');
+                countdownElement.classList.remove('urgent', 'warning', 'now');
+
+                if (countdown.totalSeconds <= 60) {
+                    card.classList.add('urgent');
+                    countdownElement.classList.add('urgent');
+                } else if (countdown.totalSeconds <= 180) {
+                    card.classList.add('warning');
+                    countdownElement.classList.add('warning');
+                } else if (countdown.totalSeconds <= 300) {
+                    card.classList.add('departing');
+                }
+
+                if (countdown.totalSeconds <= 30) {
+                    countdownElement.classList.add('now');
+                }
+            }
+
+            updateConnectionStatus(status) {
+                const statusDot = document.querySelector('.status-dot');
+                const statusText = document.querySelector('.connection-status span:last-child');
+
+                if (statusDot) {
+                    statusDot.className = `status-dot ${status}`;
+                }
+
+                if (statusText) {
+                    const statusMessages = {
+                        'connected': 'Ansluten',
+                        'disconnected': 'Frånkopplad',
+                        'reconnecting': 'Återansluter...',
+                        'error': 'Anslutningsfel'
+                    };
+                    statusText.textContent = statusMessages[status] || 'Okänd status';
+                }
+            }
+
+            attemptReconnect() {
+                if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+                    console.error('Max reconnection attempts reached');
+                    return;
+                }
+
+                this.reconnectAttempts++;
+                this.updateConnectionStatus('reconnecting');
+
+                setTimeout(() => {
+                    console.log(`Reconnection attempt ${this.reconnectAttempts}`);
+                    this.initializeWebSocket();
+                }, this.reconnectDelay * this.reconnectAttempts);
             }
 
             setupEventListeners() {
-                const refreshBtn = document.getElementById('refreshBtn');
-                refreshBtn.addEventListener('click', () => {
-                    this.manualRefresh();
-                });
+                const refreshButton = document.getElementById('refresh-btn');
+                if (refreshButton) {
+                    refreshButton.addEventListener('click', () => {
+                        this.refreshData();
+                    });
+                }
+
+                setInterval(() => {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.send('ping');
+                    }
+                }, 30000);
             }
 
-            async manualRefresh() {
-                const refreshBtn = document.getElementById('refreshBtn');
-                const refreshIcon = document.getElementById('refreshIcon');
-                
-                refreshBtn.disabled = true;
-                refreshIcon.style.animation = 'spin 1s linear infinite';
-                
+            async refreshData() {
+                const refreshButton = document.getElementById('refresh-btn');
+
+                if (refreshButton) {
+                    refreshButton.disabled = true;
+                    refreshButton.innerHTML = '<span style="animation: spin 1s linear infinite;">⟳</span> Uppdaterar...';
+                }
+
                 try {
                     const response = await fetch('/api/refresh', { method: 'POST' });
-                    if (response.ok) {
-                        console.log('Manual refresh triggered');
-                    }
-                } catch (error) {
+                    const result = await response.json();
+                    console.log('Manual refresh triggered:', result);
+                } catch (error) {  
                     console.error('Manual refresh failed:', error);
                 } finally {
-                    setTimeout(() => {
-                        refreshBtn.disabled = false;
-                        refreshIcon.style.animation = '';
-                    }, 2000);
-                }
-            }
-
-            destroy() {
-                if (this.websocket) {
-                    this.websocket.close();
-                }
-                if (this.countdownTimer) {
-                    clearInterval(this.countdownTimer);
+                    if (refreshButton) {
+                        setTimeout(() => {
+                            refreshButton.disabled = false;
+                            refreshButton.innerHTML = '🔄 Uppdatera nu';
+                        }, 2000);
+                    }
                 }
             }
         }
 
-        // Initialize the app when DOM is loaded
         document.addEventListener('DOMContentLoaded', () => {
-            window.busApp = new BusCountdownClient();
-        });
-
-        // Cleanup on page unload
-        window.addEventListener('beforeunload', () => {
-            if (window.busApp) {
-                window.busApp.destroy();
-            }
+            console.log('Stockholm Bus Countdown App starting (4 departures)...');
+            window.busApp = new BusCountdownApp();
         });
     </script>
 </body>
