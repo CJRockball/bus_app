@@ -5,13 +5,280 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stockholm Bus Line 1 Countdown - FastAPI</title>
     <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* Compact layout - directions stacked vertically, same direction horizontal */
+        .destinations-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .direction-section {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .direction-header {
+            text-align: center;
+            padding: 0.75rem;
+            background: linear-gradient(135deg, var(--sl-blue) 0%, var(--sl-dark-blue) 100%);
+            color: white;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .direction-header.fridhemsplan {
+            background: linear-gradient(135deg, #0056CC 0%, #003D99 100%);
+        }
+
+        .direction-header.stora-essingen {
+            background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+        }
+
+        .direction-header h3 {
+            margin: 0;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        /* Horizontal layout for same direction departures */
+        .departures-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            padding: 1rem;
+            background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%);
+        }
+
+        .direction-section.fridhemsplan .departures-row {
+            background: linear-gradient(135deg, #e6f3ff 0%, #ffffff 100%);
+        }
+
+        .direction-section.stora-essingen .departures-row {
+            background: linear-gradient(135deg, #e8f5e8 0%, #ffffff 100%);
+        }
+
+        .departure-item {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            text-align: center;
+            min-height: 120px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .departure-item:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .departure-item.urgent {
+            border-left: 4px solid var(--danger-red);
+            background: linear-gradient(135deg, #ffe6e6 0%, #ffffff 100%);
+        }
+
+        .departure-item.warning {
+            border-left: 4px solid var(--warning-orange);
+            background: linear-gradient(135deg, #fff3e0 0%, #ffffff 100%);
+        }
+
+        .departure-item.departing {
+            border-left: 4px solid var(--success-green);
+            background: linear-gradient(135deg, #e8f5e8 0%, #ffffff 100%);
+        }
+
+        /* Compact timer - still large but fits better */
+        .departure-countdown {
+            font-size: 2.5rem;
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+            color: var(--sl-blue);
+            text-align: center;
+            padding: 0.5rem;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 8px;
+            margin: 0.5rem 0;
+            text-shadow: 0 2px 4px rgba(0, 132, 255, 0.2);
+            transition: all 0.3s ease;
+            letter-spacing: 0.05em;
+        }
+
+        .departure-countdown.urgent {
+            color: var(--danger-red);
+            text-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+        }
+
+        .departure-countdown.warning {
+            color: var(--warning-orange);
+            text-shadow: 0 2px 4px rgba(253, 126, 20, 0.3);
+        }
+
+        .departure-countdown.now {
+            color: var(--success-green);
+            animation: flash 1s infinite;
+            text-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+        }
+
+        /* Single live indicator per direction */
+        .live-indicator {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: var(--danger-red);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 0.2rem;
+        }
+
+        .direction-section {
+            position: relative;
+        }
+
+        .departure-time {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-align: center;
+            margin-top: 0.25rem;
+            font-weight: 500;
+        }
+
+        /* Responsive design for mobile */
+        @media (max-width: 768px) {
+            .departures-row {
+                grid-template-columns: 1fr;
+                gap: 0.5rem;
+                padding: 0.75rem;
+            }
+
+            .departure-item {
+                min-height: 100px;
+                padding: 0.75rem;
+            }
+
+            .departure-countdown {
+                font-size: 2rem;
+                padding: 0.4rem;
+            }
+
+            .direction-header h3 {
+                font-size: 0.9rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .departure-countdown {
+                font-size: 1.8rem;
+            }
+
+            .departure-item {
+                min-height: 90px;
+            }
+        }
+
+        /* Empty state for directions */
+        .direction-empty {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        /* Enhanced departed state */
+        .departure-item.departed {
+            opacity: 0.6;
+            filter: grayscale(50%);
+            transform: scale(0.98);
+        }
+
+        .departure-item.departed .departure-countdown {
+            color: var(--text-muted) !important;
+            font-style: italic;
+        }
+
+        /* Compact main content */
+        .main-content {
+            flex: 1;
+            padding: 1rem;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: var(--bg-white);
+            min-height: 100vh;
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Compact header */
+        .header {
+            background: linear-gradient(135deg, var(--sl-blue) 0%, var(--sl-dark-blue) 100%);
+            color: white;
+            padding: 1.5rem 1rem;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            margin-bottom: 0.25rem;
+            font-weight: 600;
+        }
+
+        .header p {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            margin-bottom: 0.75rem;
+        }
+
+        /* Swedish time display */
+        .status-bar {
+            background: var(--bg-light);
+            padding: 0.75rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            text-align: center;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .current-time {
+            color: var(--sl-blue);
+            font-weight: 600;
+        }
+
+        .error-message {
+            background: #fff3cd;
+            color: #856404;
+            padding: 0.5rem;
+            border-radius: 4px;
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
+        <!-- Compact Header -->
         <header class="header">
             <h1>🚌 Buss Linje 1</h1>
-            <p>Stora Essingen → Båda riktningar</p>
+            <p>Stora Essingen → Realtid</p>
             <div class="connection-status">
                 <div class="status-dot connected"></div>
                 <span>Ansluten</span>
@@ -20,82 +287,73 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Status Bar -->
+            <!-- Current Time Bar -->
             <div class="status-bar">
-                {% if initial_data.last_updated %}
-                    Senast uppdaterad: {{ initial_data.last_updated[:19] | replace('T', ' ') }}
-                {% else %}
-                    Laddar...
-                {% endif %}
+                Aktuell tid: <span class="current-time" id="current-time">--:--</span>
 
                 {% if initial_data.error %}
                     <div class="error-message">{{ initial_data.error }}</div>
                 {% endif %}
             </div>
 
-            <!-- Departures Container -->
-            <div class="departures-container">
-                {% if initial_data.departures_by_direction %}
-                    {% for direction, departures in initial_data.departures_by_direction.items() %}
-                        {% if departures %}
-                            <!-- Direction Header -->
-                            <div class="direction-header">
-                                <h3>
-                                    {% if direction == "1" %}
-                                        🔵 Mot Frihamnen
-                                    {% elif direction == "2" %}
-                                        🟢 Mot Essingetorget  
-                                    {% else %}
-                                        🚌 Riktning {{ direction }}
-                                    {% endif %}
-                                </h3>
-                            </div>
-
-                            <!-- Departures for this direction -->
-                            {% for departure in departures %}
-                                {% set outer_loop = loop %}
-                                <div class="departure-card" data-departure-index="{{ loop.index0 + (outer_loop.index0 * 2) }}">
-                                    <div class="departure-header">
-                                        <span class="line-badge">{{ departure.line }}</span>
-                                        <span class="destination">{{ departure.destination }}</span>
-                                        {% if departure.real_time %}
-                                            <span class="realtime-indicator">🔴 Live</span>
-                                        {% endif %}
-                                    </div>
-                                    <div class="countdown-display" id="countdown-{{ loop.index0 + (outer_loop.index0 * 2) }}">--:--</div>
+            <!-- Compact Destinations Layout -->
+            <div class="destinations-container">
+                <!-- Fridhemsplan Direction -->
+                <div class="direction-section fridhemsplan">
+                    <div class="direction-header fridhemsplan">
+                        <h3>🔵 Mot Fridhemsplan</h3>
+                    </div>
+                    {% if initial_data.departures_by_destination and initial_data.departures_by_destination.get('Fridhemsplan') %}
+                        {% set fridhemsplan_departures = initial_data.departures_by_destination['Fridhemsplan'] %}
+                        {% set has_live = fridhemsplan_departures | selectattr('real_time', 'equalto', true) | list | length > 0 %}
+                        {% if has_live %}
+                            <div class="live-indicator">🔴 Live</div>
+                        {% endif %}
+                        <div class="departures-row">
+                            {% for departure in fridhemsplan_departures %}
+                                <div class="departure-item" data-departure-index="{{ loop.index0 }}">
+                                    <div class="departure-countdown" id="countdown-{{ loop.index0 }}">--:--</div>
                                     <div class="departure-time">
                                         Avgång: {{ departure.expected_time[11:16] if departure.expected_time else '--:--' }}
                                     </div>
                                 </div>
                             {% endfor %}
-                        {% endif %}
-                    {% endfor %}
-                {% else %}
-                    <!-- Fallback to flat list if direction grouping not available -->
-                    {% for departure in initial_data.departures %}
-                    <div class="departure-card" data-departure-index="{{ loop.index0 }}">
-                        <div class="departure-header">
-                            <span class="line-badge">{{ departure.line }}</span>
-                            <span class="destination">{{ departure.destination }}</span>
-                            {% if departure.real_time %}
-                                <span class="realtime-indicator">🔴 Live</span>
-                            {% endif %}
                         </div>
-                        <div class="countdown-display" id="countdown-{{ loop.index0 }}">--:--</div>
-                        <div class="departure-time">
-                            Avgång: {{ departure.expected_time[11:16] if departure.expected_time else '--:--' }}
+                    {% else %}
+                        <div class="direction-empty">
+                            Inga avgångar mot Fridhemsplan
                         </div>
-                    </div>
-                    {% endfor %}
-                {% endif %}
-
-                {% if not initial_data.departures %}
-                <div class="no-data">
-                    <div class="no-data-icon">🚌</div>
-                    <h3>Inga avgångar hittades för linje 1</h3>
-                    <p class="small-text">Kontrollerar igen automatiskt...</p>
+                    {% endif %}
                 </div>
-                {% endif %}
+
+                <!-- Stora Essingen Direction -->
+                <div class="direction-section stora-essingen">
+                    <div class="direction-header stora-essingen">
+                        <h3>🟢 Mot Stora Essingen</h3>
+                    </div>
+                    {% if initial_data.departures_by_destination and initial_data.departures_by_destination.get('Stora Essingen') %}
+                        {% set stora_essingen_departures = initial_data.departures_by_destination['Stora Essingen'] %}
+                        {% set has_live = stora_essingen_departures | selectattr('real_time', 'equalto', true) | list | length > 0 %}
+                        {% if has_live %}
+                            <div class="live-indicator">🔴 Live</div>
+                        {% endif %}
+                        <div class="departures-row">
+                            {% for departure in stora_essingen_departures %}
+                                {% set departure_index = loop.index0 + 2 %}
+                                <div class="departure-item" data-departure-index="{{ departure_index }}">
+                                    <div class="departure-countdown" id="countdown-{{ departure_index }}">--:--</div>
+                                    <div class="departure-time">
+                                        Avgång: {{ departure.expected_time[11:16] if departure.expected_time else '--:--' }}
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="direction-empty">
+                            Inga avgångar mot Stora Essingen
+                        </div>
+                    {% endif %}
+                </div>
             </div>
 
             <!-- Controls -->
@@ -104,22 +362,13 @@
                     🔄 Uppdatera nu
                 </button>
             </div>
-
-            <!-- Debug Info -->
-            <div style="margin-top: 20px; padding: 10px; background: #f0f0f0; border-radius: 5px; font-size: 12px;">
-                <div id="debug-info">
-                    <div>Svensk tid: <span id="swedish-time">--</span></div>
-                    <div>Antal avgångar: <span id="departure-count">{{ initial_data.departures|length if initial_data.departures else 0 }}</span></div>
-                    <div>Test beräkning: <span id="test-calc">--</span></div>
-                </div>
-            </div>
         </main>
 
         <!-- Footer -->
         <footer class="footer">
             <p>&copy; 2024 Stockholm Bus Countdown - Realtidsdata från SL</p>
             <div class="tech-info">
-                FastAPI • WebSockets • 4 Timers (2 per riktning)
+                FastAPI • WebSockets • Compact Layout
             </div>
         </footer>
     </div>
@@ -129,19 +378,20 @@
             constructor() {
                 this.ws = null;
                 this.countdownTimers = new Map();
+                this.currentTimeTimer = null;
                 this.reconnectAttempts = 0;
                 this.maxReconnectAttempts = 5;
                 this.reconnectDelay = 1000;
 
                 this.initializeWebSocket();
                 this.setupEventListeners();
-                this.startDebugClock();
+                this.startCurrentTimeClock();
 
                 // Start countdown timers for initial data
                 this.initializeInitialCountdowns();
             }
 
-            // Swedish time calculation (fixed from previous version)
+            // Swedish time calculation (from previous fix)
             getSwedishTime() {
                 const now = new Date();
 
@@ -149,36 +399,28 @@
                     timeZone: 'Europe/Stockholm'
                 });
 
-                console.log('Swedish time string from API:', swedishTimeStr);
-
                 const [datePart, timePart] = swedishTimeStr.split(' ');
                 const [year, month, day] = datePart.split('-').map(Number);
                 const [hour, minute, second] = timePart.split(':').map(Number);
 
-                const swedishTime = new Date(year, month - 1, day, hour, minute, second);
-
-                return swedishTime;
+                return new Date(year, month - 1, day, hour, minute, second);
             }
 
-            // Debug method 
-            startDebugClock() {
-                const updateDebugInfo = () => {
+            // Current time display
+            startCurrentTimeClock() {
+                const updateCurrentTime = () => {
                     const swedishTime = this.getSwedishTime();
+                    const timeString = swedishTime.toLocaleTimeString('sv-SE', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
 
-                    document.getElementById('swedish-time').textContent = swedishTime.toLocaleString('sv-SE');
-
-                    // Update departure count
-                    const cards = document.querySelectorAll('.departure-card');
-                    document.getElementById('departure-count').textContent = cards.length;
-
-                    // Test calculation with mock departure time
-                    const mockDeparture = new Date(swedishTime.getTime() + 5 * 60000);
-                    const testCountdown = this.calculateCountdown(mockDeparture.toISOString());
-                    document.getElementById('test-calc').textContent = testCountdown ? testCountdown.display : 'Error';
+                    document.getElementById('current-time').textContent = timeString;
                 };
 
-                updateDebugInfo();
-                setInterval(updateDebugInfo, 1000);
+                updateCurrentTime();
+                this.currentTimeTimer = setInterval(updateCurrentTime, 1000);
             }
 
             initializeInitialCountdowns() {
@@ -246,121 +488,100 @@
             updateBusData(data) {
                 this.clearAllCountdownTimers();
 
+                // Show error message if present
                 const statusBar = document.querySelector('.status-bar');
-                if (statusBar) {
-                    let statusText = 'Laddar...';
-                    if (data.last_updated) {
-                        const lastUpdated = new Date(data.last_updated).toLocaleString('sv-SE');
-                        statusText = `Senast uppdaterad: ${lastUpdated}`;
+                if (statusBar && data.error) {
+                    const errorDiv = statusBar.querySelector('.error-message');
+                    if (!errorDiv) {
+                        const errorElement = document.createElement('div');
+                        errorElement.className = 'error-message';
+                        errorElement.textContent = data.error;
+                        statusBar.appendChild(errorElement);
+                    } else {
+                        errorDiv.textContent = data.error;
                     }
-
-                    if (data.error) {
-                        statusText += `<div class="error-message">${data.error}</div>`;
+                } else if (statusBar) {
+                    const errorDiv = statusBar.querySelector('.error-message');
+                    if (errorDiv) {
+                        errorDiv.remove();
                     }
-
-                    statusBar.innerHTML = statusText;
                 }
 
-                this.updateDepartures(data);
+                this.updateDirectionSections(data);
             }
 
-            updateDepartures(data) {
-                const container = document.querySelector('.departures-container');
-                if (!container) return;
+            updateDirectionSections(data) {
+                const departuresByDestination = data.departures_by_destination || {};
 
-                const departures = data.departures || [];
-                const departuresByDirection = data.departures_by_direction || {};
+                // Update Fridhemsplan section
+                this.updateDirectionSection('Fridhemsplan', departuresByDestination['Fridhemsplan'] || [], 0);
+
+                // Update Stora Essingen section  
+                this.updateDirectionSection('Stora Essingen', departuresByDestination['Stora Essingen'] || [], 2);
+            }
+
+            updateDirectionSection(destination, departures, indexOffset) {
+                const sectionClass = destination.toLowerCase().replace(' ', '-');
+                const section = document.querySelector('.direction-section.' + sectionClass);
+                const rowContainer = section.querySelector('.departures-row');
+
+                if (!rowContainer) return;
 
                 if (departures.length === 0) {
-                    container.innerHTML = `
-                        <div class="no-data">
-                            <div class="no-data-icon">🚌</div>
-                            <h3>Inga avgångar hittades för linje 1</h3>
-                            <p class="small-text">Kontrollerar igen automatiskt...</p>
+                    section.innerHTML = `
+                        <div class="direction-header ${sectionClass}">
+                            <h3>${destination === 'Fridhemsplan' ? '🔵 Mot Fridhemsplan' : '🟢 Mot Stora Essingen'}</h3>
+                        </div>
+                        <div class="direction-empty">
+                            Inga avgångar mot ${destination}
                         </div>
                     `;
                     return;
                 }
 
-                // Generate HTML grouped by direction
-                let html = '';
-                let globalIndex = 0;
+                // Check if any departure has real_time
+                const hasLive = departures.some(dep => dep.real_time);
 
-                // If we have direction grouping, use it
-                if (Object.keys(departuresByDirection).length > 0) {
-                    for (const [direction, directionDepartures] of Object.entries(departuresByDirection)) {
-                        if (directionDepartures && directionDepartures.length > 0) {
-                            // Direction header
-                            let directionName = `Riktning ${direction}`;
-                            if (direction === "1") directionName = "🔵 Mot Frihamnen";
-                            else if (direction === "2") directionName = "🟢 Mot Essingetorget";
-
-                            html += `<div class="direction-header"><h3>${directionName}</h3></div>`;
-
-                            // Departures for this direction
-                            for (const departure of directionDepartures) {
-                                const realtimeIndicator = departure.real_time ? 
-                                    '<span class="realtime-indicator">🔴 Live</span>' : '';
-
-                                const departureTime = departure.expected_time ? 
-                                    departure.expected_time.substring(11, 16) : '--:--';
-
-                                html += `
-                                    <div class="departure-card" data-departure-index="${globalIndex}">
-                                        <div class="departure-header">
-                                            <span class="line-badge">${departure.line}</span>
-                                            <span class="destination">${departure.destination}</span>
-                                            ${realtimeIndicator}
-                                        </div>
-                                        <div class="countdown-display" id="countdown-${globalIndex}">--:--</div>
-                                        <div class="departure-time">
-                                            Avgång: ${departureTime}
-                                        </div>
-                                    </div>
-                                `;
-                                globalIndex++;
-                            }
-                        }
-                    }
-                } else {
-                    // Fallback to flat list
-                    for (const departure of departures) {
-                        const realtimeIndicator = departure.real_time ? 
-                            '<span class="realtime-indicator">🔴 Live</span>' : '';
-
-                        const departureTime = departure.expected_time ? 
-                            departure.expected_time.substring(11, 16) : '--:--';
-
-                        html += `
-                            <div class="departure-card" data-departure-index="${globalIndex}">
-                                <div class="departure-header">
-                                    <span class="line-badge">${departure.line}</span>
-                                    <span class="destination">${departure.destination}</span>
-                                    ${realtimeIndicator}
-                                </div>
-                                <div class="countdown-display" id="countdown-${globalIndex}">--:--</div>
-                                <div class="departure-time">
-                                    Avgång: ${departureTime}
-                                </div>
-                            </div>
-                        `;
-                        globalIndex++;
-                    }
+                // Update live indicator
+                const existingLiveIndicator = section.querySelector('.live-indicator');
+                if (hasLive && !existingLiveIndicator) {
+                    const liveIndicator = document.createElement('div');
+                    liveIndicator.className = 'live-indicator';
+                    liveIndicator.innerHTML = '🔴 Live';
+                    section.appendChild(liveIndicator);
+                } else if (!hasLive && existingLiveIndicator) {
+                    existingLiveIndicator.remove();
                 }
 
-                container.innerHTML = html;
+                // Generate HTML for departures
+                const html = departures.map((departure, index) => {
+                    const globalIndex = index + indexOffset;
+                    const departureTime = departure.expected_time ? 
+                        departure.expected_time.substring(11, 16) : '--:--';
 
-                // Start countdown timers for all departures
+                    return `
+                        <div class="departure-item" data-departure-index="${globalIndex}">
+                            <div class="departure-countdown" id="countdown-${globalIndex}">--:--</div>
+                            <div class="departure-time">
+                                Avgång: ${departureTime}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                rowContainer.innerHTML = html;
+
+                // Start countdown timers
                 departures.forEach((departure, index) => {
                     if (departure.expected_time) {
-                        this.startCountdownTimer(departure.expected_time, index);
+                        this.startCountdownTimer(departure.expected_time, index + indexOffset);
                     }
                 });
             }
 
             startCountdownTimer(expectedTime, index) {
                 const countdownElement = document.getElementById(`countdown-${index}`);
-                const departureCard = document.querySelector(`[data-departure-index="${index}"]`);
+                const departureItem = document.querySelector(`[data-departure-index="${index}"]`);
 
                 if (!countdownElement) return;
 
@@ -373,13 +594,11 @@
 
                     if (countdown) {
                         countdownElement.textContent = countdown.display;
-                        console.log(`Countdown ${index}: ${countdown.display} (${countdown.totalSeconds}s remaining)`);
-                        this.updateDepartureCardState(departureCard, countdownElement, countdown);
+                        this.updateDepartureItemState(departureItem, countdownElement, countdown);
                     } else {
                         countdownElement.textContent = 'Avgått';
-                        console.log(`Departure ${index} has departed`);
-                        if (departureCard) {
-                            departureCard.classList.add('departed');
+                        if (departureItem) {
+                            departureItem.classList.add('departed');
                         }
                         if (this.countdownTimers.has(index)) {
                             clearInterval(this.countdownTimers.get(index));
@@ -406,31 +625,28 @@
                 const minutes = Math.floor(diff / 60000);
                 const seconds = Math.max(0, Math.floor((diff % 60000) / 1000));
 
-                const minutesStr = minutes.toString().padStart(2, '0');
-                const secondsStr = seconds.toString().padStart(2, '0');
-
                 return {
-                    display: `${minutesStr}:${secondsStr}`,
+                    display: `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`,
                     minutes: minutes,
                     seconds: seconds,
                     totalSeconds: Math.floor(diff / 1000)
                 };
             }
 
-            updateDepartureCardState(card, countdownElement, countdown) {
-                if (!card || !countdown) return;
+            updateDepartureItemState(item, countdownElement, countdown) {
+                if (!item || !countdown) return;
 
-                card.classList.remove('urgent', 'warning', 'departing');
+                item.classList.remove('urgent', 'warning', 'departing');
                 countdownElement.classList.remove('urgent', 'warning', 'now');
 
                 if (countdown.totalSeconds <= 60) {
-                    card.classList.add('urgent');
+                    item.classList.add('urgent');
                     countdownElement.classList.add('urgent');
                 } else if (countdown.totalSeconds <= 180) {
-                    card.classList.add('warning');
+                    item.classList.add('warning');
                     countdownElement.classList.add('warning');
                 } else if (countdown.totalSeconds <= 300) {
-                    card.classList.add('departing');
+                    item.classList.add('departing');
                 }
 
                 if (countdown.totalSeconds <= 30) {
@@ -513,7 +729,7 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            console.log('Stockholm Bus Countdown App starting (4 departures)...');
+            console.log('Stockholm Bus Countdown App starting (final clean version)...');
             window.busApp = new BusCountdownApp();
         });
     </script>

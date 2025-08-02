@@ -1,7 +1,7 @@
 """
 Stockholm Bus Line 1 Countdown - FastAPI Version
 Real-time bus tracking app with server-side rendering
-Modified to show 2 departures per direction (4 total)
+Fixed to group by destination and show correct order
 """
 
 import asyncio
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # Global variables for caching data
 bus_data_cache = {
     "departures": [],
-    "departures_by_direction": {},
+    "departures_by_destination": {},
     "last_updated": None,
     "error": None
 }
@@ -55,14 +55,15 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# SL API Configuration - MODIFIED for 4 departures
+# SL API Configuration - CORRECTED for destination-based grouping
 SL_API_CONFIG = {
     "base_url": "https://transport.integration.sl.se/v1",
     "site_id": "1285",  # Stora Essingen
     "bus_line": "1",
-    "max_departures": 6,  # Fetch more to ensure 2 per direction
-    "departures_per_direction": 2,  # NEW: limit per direction
-    "refresh_interval": 30  # seconds
+    "max_departures": 8,  # Fetch more to ensure 2 per destination
+    "departures_per_destination": 2,  # NEW: limit per destination
+    "refresh_interval": 30,  # seconds
+    "target_destinations": ["Fridhemsplan", "Stora Essingen"]  # Expected destinations
 }
 
 # CORS proxies for handling CORS issues
@@ -113,7 +114,7 @@ class BusDataFetcher:
         return self.get_mock_data()
 
     def process_departure_data(self, data: Dict) -> Dict:
-        """Process API response data - MODIFIED to group by direction"""
+        """Process API response data - FIXED to group by destination"""
         try:
             all_departures = []
             if data and "departures" in data:
@@ -134,30 +135,37 @@ class BusDataFetcher:
                         }
                         all_departures.append(departure)
 
-            # Sort by expected time
+            # Sort by expected time first
             all_departures.sort(key=lambda x: x["expected_time"] or "")
 
-            # Group by direction and limit to 2 per direction
-            departures_by_direction = {}
+            # Group by destination and limit to 2 per destination
+            departures_by_destination = {}
             final_departures = []
 
-            for departure in all_departures:
-                direction = departure["direction"]
-                if direction not in departures_by_direction:
-                    departures_by_direction[direction] = []
+            # Process each target destination
+            for target_dest in SL_API_CONFIG["target_destinations"]:
+                departures_by_destination[target_dest] = []
 
-                # Add to direction group if under limit
-                if len(departures_by_direction[direction]) < SL_API_CONFIG["departures_per_direction"]:
-                    departures_by_direction[direction].append(departure)
-                    final_departures.append(departure)
+                # Find departures for this destination
+                dest_departures = [
+                    dep for dep in all_departures 
+                    if target_dest.lower() in dep["destination"].lower()
+                ][:SL_API_CONFIG["departures_per_destination"]]
 
-                # Stop if we have enough total departures
-                if len(final_departures) >= 4:
-                    break
+                departures_by_destination[target_dest] = dest_departures
+                final_departures.extend(dest_departures)
+
+            # If we don't have enough departures, add any remaining ones
+            if len(final_departures) < 4:
+                remaining_departures = [
+                    dep for dep in all_departures 
+                    if dep not in final_departures
+                ][:4 - len(final_departures)]
+                final_departures.extend(remaining_departures)
 
             return {
                 "departures": final_departures,
-                "departures_by_direction": departures_by_direction,
+                "departures_by_destination": departures_by_destination,
                 "last_updated": datetime.now(tz=ZoneInfo('Europe/Stockholm')).isoformat(),
                 "error": None,
                 "source": "real_api"
@@ -167,52 +175,52 @@ class BusDataFetcher:
             return self.get_mock_data()
 
     def get_mock_data(self) -> Dict:
-        """Generate mock data for demonstration - MODIFIED for 4 departures"""
+        """Generate mock data for demonstration - CORRECTED destinations and order"""
         now = datetime.now(tz=ZoneInfo('Europe/Stockholm'))
 
-        # Create 2 departures per direction
+        # Create departures with correct destinations and realistic times
         mock_departures = [
-            # Direction 1 (Frihamnen)
+            # Toward Fridhemsplan (more frequent - city center direction)
             {
                 "line": "1",
-                "destination": "Frihamnen",
-                "expected_time": (now + timedelta(minutes=3)).isoformat(),
+                "destination": "Fridhemsplan",
+                "expected_time": (now + timedelta(minutes=4)).isoformat(),
                 "direction": "1",
                 "real_time": True
             },
             {
                 "line": "1",
-                "destination": "Frihamnen", 
-                "expected_time": (now + timedelta(minutes=8)).isoformat(),
+                "destination": "Fridhemsplan", 
+                "expected_time": (now + timedelta(minutes=9)).isoformat(),
                 "direction": "1",
                 "real_time": False
             },
-            # Direction 2 (Stora Essingen)
+            # Toward Stora Essingen (return/depot direction - less frequent)
             {
                 "line": "1",
                 "destination": "Stora Essingen",
-                "expected_time": (now + timedelta(minutes=5)).isoformat(),
+                "expected_time": (now + timedelta(minutes=12)).isoformat(),
                 "direction": "2",
                 "real_time": True
             },
             {
                 "line": "1",
                 "destination": "Stora Essingen",
-                "expected_time": (now + timedelta(minutes=12)).isoformat(),
+                "expected_time": (now + timedelta(minutes=22)).isoformat(),
                 "direction": "2", 
                 "real_time": False
             }
         ]
 
-        # Group by direction
-        departures_by_direction = {
-            "1": [dep for dep in mock_departures if dep["direction"] == "1"],
-            "2": [dep for dep in mock_departures if dep["direction"] == "2"]
+        # Group by destination
+        departures_by_destination = {
+            "Fridhemsplan": [dep for dep in mock_departures if dep["destination"] == "Fridhemsplan"],
+            "Stora Essingen": [dep for dep in mock_departures if dep["destination"] == "Stora Essingen"]
         }
 
         return {
             "departures": mock_departures,
-            "departures_by_direction": departures_by_direction,
+            "departures_by_destination": departures_by_destination,
             "last_updated": now.isoformat(),
             "error": "Using demonstration data - live API unavailable",
             "source": "mock_data"
@@ -268,8 +276,8 @@ async def lifespan(app: FastAPI):
 # Initialize FastAPI app
 app = FastAPI(
     title="Stockholm Bus Line 1 Countdown",
-    description="Real-time countdown for Stockholm bus line 1 from Stora Essingen - 2 per direction",
-    version="2.1.0",
+    description="Real-time countdown for Stockholm bus line 1 from Stora Essingen",
+    version="2.2.0",
     lifespan=lifespan
 )
 
@@ -334,7 +342,7 @@ async def health_check():
         "last_updated": bus_data_cache.get("last_updated"),
         "active_connections": len(manager.active_connections),
         "total_departures": len(bus_data_cache.get("departures", [])),
-        "departures_by_direction": {k: len(v) for k, v in bus_data_cache.get("departures_by_direction", {}).items()}
+        "departures_by_destination": {k: len(v) for k, v in bus_data_cache.get("departures_by_destination", {}).items()}
     }
 
 if __name__ == "__main__":
