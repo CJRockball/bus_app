@@ -3,7 +3,7 @@ Stockholm Bus Line 1 Countdown - FastAPI Version
 Real-time bus tracking app with server-side rendering
 Fixed to group by destination and show correct order
 """
-
+import os
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone
@@ -13,9 +13,13 @@ from fastapi import FastAPI, Request, BackgroundTasks, WebSocket, WebSocketDisco
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 from zoneinfo import ZoneInfo
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -280,6 +284,67 @@ app = FastAPI(
     version="2.2.0",
     lifespan=lifespan
 )
+
+def get_cors_origins():
+    """Fallback allowed origins if not set via environment variable."""
+    env = os.getenv("ENVIRONMENT", "development")
+    if env == "production":
+        # Put your actual production domain(s) here
+        return [
+            "https://yourdomain.com",
+            "https://www.yourdomain.com",
+            "https://bus-app.yourdomain.com",
+        ]
+    elif env == "staging":
+        return [
+            "https://staging.yourdomain.com",
+            "https://dev.yourdomain.com",
+        ]
+    else:
+        # Development defaults
+        return [
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+            "http://localhost:3000",
+            "http://localhost:5173",
+        ]
+
+def get_cors_settings() -> dict:
+    """Get CORS settings based on environment variables"""
+    
+    # Get origins from environment variable
+    origins_env = os.getenv("CORS_ORIGINS", "")
+    if origins_env:
+        allowed_origins = [origin.strip() for origin in origins_env.split(",")]
+    else:
+        # Fallback based on environment
+        env = os.getenv("ENVIRONMENT", "development")
+        allowed_origins = get_cors_origins()
+    
+    return {
+        "allow_origins": allowed_origins,
+        "allow_credentials": True,
+        "allow_methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": [
+            "Accept",
+            "Accept-Language",
+            "Content-Language", 
+            "Content-Type",
+            "Authorization",
+            "X-Requested-With",
+            "Cache-Control",
+            "Sec-WebSocket-Extensions",
+            "Sec-WebSocket-Key",
+            "Sec-WebSocket-Version",
+        ],
+        "expose_headers": ["Content-Length"],
+        "max_age": 600,
+    }
+
+# Apply CORS settings
+cors_settings = get_cors_settings()
+app.add_middleware(CORSMiddleware, **cors_settings)
+
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
