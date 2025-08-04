@@ -30,7 +30,7 @@
             margin: 0;
         }
 
-        .direction-header.fridhemsplan {
+        .direction-header.frihamnen {
             background: linear-gradient(135deg, #0056CC 0%, #003D99 100%);
         }
 
@@ -56,7 +56,7 @@
             background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%);
         }
 
-        .direction-section.fridhemsplan .departures-row {
+        .direction-section.frihamnen .departures-row {
             background: linear-gradient(135deg, #e6f3ff 0%, #ffffff 100%);
         }
 
@@ -298,19 +298,19 @@
 
             <!-- Compact Destinations Layout -->
             <div class="destinations-container">
-                <!-- Fridhemsplan Direction -->
-                <div class="direction-section fridhemsplan">
-                    <div class="direction-header fridhemsplan">
-                        <h3>🔵 Mot Fridhemsplan</h3>
+                <!-- Frihamnen Direction -->
+                <div class="direction-section frihamnen">
+                    <div class="direction-header frihamnen">
+                        <h3>🔵 Mot Frihamnen</h3>
                     </div>
-                    {% if initial_data.departures_by_destination and initial_data.departures_by_destination.get('Fridhemsplan') %}
-                        {% set fridhemsplan_departures = initial_data.departures_by_destination['Fridhemsplan'] %}
-                        {% set has_live = fridhemsplan_departures | selectattr('real_time', 'equalto', true) | list | length > 0 %}
+                    {% if initial_data.departures_by_destination and initial_data.departures_by_destination.get('Frihamnen') %}
+                        {% set frihamnen_departures = initial_data.departures_by_destination['Frihamnen'] %}
+                        {% set has_live = frihamnen_departures | selectattr('real_time', 'equalto', true) | list | length > 0 %}
                         {% if has_live %}
                             <div class="live-indicator">🔴 Live</div>
                         {% endif %}
                         <div class="departures-row">
-                            {% for departure in fridhemsplan_departures %}
+                            {% for departure in frihamnen_departures %}
                                 <div class="departure-item" data-departure-index="{{ loop.index0 }}">
                                     <div class="departure-countdown" id="countdown-{{ loop.index0 }}">--:--</div>
                                     <div class="departure-time">
@@ -321,7 +321,7 @@
                         </div>
                     {% else %}
                         <div class="direction-empty">
-                            Inga avgångar mot Fridhemsplan
+                            Inga avgångar mot Frihamnen
                         </div>
                     {% endif %}
                 </div>
@@ -513,8 +513,8 @@
             updateDirectionSections(data) {
                 const departuresByDestination = data.departures_by_destination || {};
 
-                // Update Fridhemsplan section
-                this.updateDirectionSection('Fridhemsplan', departuresByDestination['Fridhemsplan'] || [], 0);
+                // Update Frihamnen section
+                this.updateDirectionSection('Frihamnen', departuresByDestination['Frihamnen'] || [], 0);
 
                 // Update Stora Essingen section  
                 this.updateDirectionSection('Stora Essingen', departuresByDestination['Stora Essingen'] || [], 2);
@@ -530,7 +530,7 @@
                 if (departures.length === 0) {
                     section.innerHTML = `
                         <div class="direction-header ${sectionClass}">
-                            <h3>${destination === 'Fridhemsplan' ? '🔵 Mot Fridhemsplan' : '🟢 Mot Stora Essingen'}</h3>
+                            <h3>${destination === 'Frihamnen' ? '🔵 Mot Frihamnen' : '🟢 Mot Stora Essingen'}</h3>
                         </div>
                         <div class="direction-empty">
                             Inga avgångar mot ${destination}

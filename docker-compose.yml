@@ -13,7 +13,7 @@ services:
     environment:
       - ENVIRONMENT=development
       - CORS_ORIGINS=http://localhost,http://localhost:8080,http://127.0.0.1:8080
-      - SL_API_CONFIG={"site_id": "740024924", "bus_line": "1", "max_departures": 2, "refresh_interval": 30}
+      - 'SL_API_CONFIG={"site_id": "1285", "bus_line": "1", "max_departures": 2, "refresh_interval": 30}'
     networks:
       - bus_network
     healthcheck:

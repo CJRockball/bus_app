@@ -67,7 +67,7 @@ SL_API_CONFIG = {
     "max_departures": 8,  # Fetch more to ensure 2 per destination
     "departures_per_destination": 2,  # NEW: limit per destination
     "refresh_interval": 30,  # seconds
-    "target_destinations": ["Fridhemsplan", "Stora Essingen"]  # Expected destinations
+    "target_destinations": ["Frihamnen", "Stora Essingen"]  # Expected destinations
 }
 
 # CORS proxies for handling CORS issues
@@ -184,17 +184,17 @@ class BusDataFetcher:
 
         # Create departures with correct destinations and realistic times
         mock_departures = [
-            # Toward Fridhemsplan (more frequent - city center direction)
+            # Toward Frihamnen (more frequent - city center direction)
             {
                 "line": "1",
-                "destination": "Fridhemsplan",
+                "destination": "Frihamnen",
                 "expected_time": (now + timedelta(minutes=4)).isoformat(),
                 "direction": "1",
                 "real_time": True
             },
             {
                 "line": "1",
-                "destination": "Fridhemsplan", 
+                "destination": "Frihamnen", 
                 "expected_time": (now + timedelta(minutes=9)).isoformat(),
                 "direction": "1",
                 "real_time": False
@@ -218,7 +218,7 @@ class BusDataFetcher:
 
         # Group by destination
         departures_by_destination = {
-            "Fridhemsplan": [dep for dep in mock_departures if dep["destination"] == "Fridhemsplan"],
+            "Frihamnen": [dep for dep in mock_departures if dep["destination"] == "Frihamnen"],
             "Stora Essingen": [dep for dep in mock_departures if dep["destination"] == "Stora Essingen"]
         }
 
