@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: stockholm-bus-app
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: CORS_ORIGINS
+        value: https://stockholm-bus-app.onrender.com
+      - key: SL_API_CONFIG
+        value: '{"site_id": "1285", "bus_line": "1", "max_departures": 8, "departures_per_destination": 2, "refresh_interval": 30}'

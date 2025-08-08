@@ -9,6 +9,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
 import httpx
+from pydantic import BaseModel, validator
 from fastapi import FastAPI, Request, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -35,12 +36,17 @@ bus_data_cache = {
 
 # WebSocket connections manager
 class ConnectionManager:
-    def __init__(self):
+    def __init__(self, max_connections: int = 100):
         self.active_connections: List[WebSocket] = []
+        self.max_connections = max_connections
 
     async def connect(self, websocket: WebSocket):
+        if len(self.active_connections) >= self.max_connections:
+            await websocket.close(code=1008, reason="Connection limit reached")
+            return False
         await websocket.accept()
         self.active_connections.append(websocket)
+        return True
 
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
@@ -370,8 +376,17 @@ async def get_departures():
     """API endpoint for getting current departures"""
     return JSONResponse(bus_data_cache)
 
+
+class RefreshRequest(BaseModel):
+    force: Optional[bool] = False
+    
+    @validator('force')
+    def validate_force(cls, v):
+        return isinstance(v, bool)
+    
+    
 @app.post("/api/refresh")
-async def refresh_departures(background_tasks: BackgroundTasks):
+async def refresh_departures(request: RefreshRequest, background_tasks: BackgroundTasks):
     """Manually refresh departure data"""
     async def refresh_task():
         global bus_data_cache
@@ -410,12 +425,14 @@ async def health_check():
         "departures_by_destination": {k: len(v) for k, v in bus_data_cache.get("departures_by_destination", {}).items()}
     }
 
+# In main.py, update the uvicorn.run section:
 if __name__ == "__main__":
     import uvicorn
+    port = int(os.environ.get("PORT", 8000))
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
-        reload=True,
+        port=port,  # Use Render's PORT environment variable
+        reload=False,  # Disable reload in production
         log_level="info"
     )
